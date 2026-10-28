@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: homelabs-projects
+  datasource:
+    url: jdbc:postgresql://localhost:5432/projects
+    username: projects
+    password: ${PROJECTS_DB_PASSWORD:projects}
+  flyway:
+    enabled: true
+  jackson:
+    # One vocabulary on every layer: JSON field names are snake_case (short_code,
+    # due_date, description_html) because the DB columns, the REST surface and the
+    # MCP tool parameters all use the same names. Java records stay camelCase.
+    property-naming-strategy: SNAKE_CASE
+  servlet:
+    multipart:
+      # Container-level upper bound only; the domain cap below
+      # (projects.attachments.max-size-mb) rejects earlier with 413.
+      max-file-size: 64MB
+      max-request-size: 64MB
+
+projects:
+  api:
+    # OAuth 2.0 resource server on the REST API. The Stage-1 caller is the MCP
+    # gateway (a configured server), so there is no Protected Resource Metadata
+    # document and no discovery endpoint: issuer and accepted audiences are pinned
+    # here. Tokens must be issued by this AS and carry one of the accepted
+    # audiences — audience is resource-location binding, never user authorization.
+    issuer-uri: ${PROJECTS_ISSUER_URI:http://localhost:8091/realms/homelabs}
+    # A list from day one: the later frontend project appends its browser-client
+    # audience. PROJECTS_RESOURCE maps the single Stage-1 audience (the MCP
+    # gateway's resource URI); env values comma-split into the list.
+    audiences: ${PROJECTS_RESOURCE:http://localhost:8090/mcp}
+  attachments:
+    # Bytes live on a filesystem volume; the DB stores metadata and a RELATIVE
+    # storage key only. Loose coupling: the root is deployment data, configurable.
+    root: ${PROJECTS_ATTACHMENT_ROOT:${user.home}/.local/share/homelabs-projects/attachments}
+    max-size-mb: 20
+
+server:
+  port: 8090
+
+logging:
+  level:
+    de.homelabs.projects: DEBUG
