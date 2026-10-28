@@ -97,3 +97,39 @@ java -jar app/target/homelabs-projects-0.0.1-SNAPSHOT.jar
 `mvn spring-boot:run` works here as well (no native code in this service). The service
 needs a PostgreSQL 17 database; Flyway migrates it on startup (`pg_trgm` is a trusted
 extension, so the database owner can create it).
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every pull request to `main`, on every push to
+`main`, on `v*` tags and on manual dispatch:
+
+| Job | Runs on | What it does |
+|---|---|---|
+| `verify` | every pull request, every push, every tag | `mvn -B -ntp verify` — unit tests plus the Testcontainers integration tests; a red run blocks every publish |
+| `publish-image` | pushes (and manual runs) on `main` | builds and pushes the container image |
+| `publish-adapter` | `v*` tag pushes | releases `de.homelabs:projects-mcp` to GitHub Packages |
+
+Flow: feature branch → pull request (`verify`) → merge to `main` (verify + image).
+The image is `ghcr.io/1sm1rk/homelabs-projects` tagged `latest` and `sha-<commit>`,
+amd64 only, built from this repo's `Dockerfile` with the parent `projects/`
+directory as build context (the layout the deployment compose files use; the image
+packs this repo's `app` module alone). It runs the fat jar as non-root (uid 1000) on
+`eclipse-temurin:25-jre-noble` and expects the attachment volume at `/srv/attachments`
+(`PROJECTS_ATTACHMENT_ROOT`). Deployment hosts pull instead of building:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Branch protection for `main` requires the status check **`verify`** — nothing is
+built or released from unverified code.
+
+The pom versions stay `0.0.1-SNAPSHOT` for local and dev builds; a tag is the version
+of record (`git tag v0.1.0 && git push origin v0.1.0`): the pipeline strips the `v`,
+applies the version to its ephemeral checkout (`mvn versions:set`) and deploys the
+adapter together with the parent pom it inherits from. A consumer then bumps its
+`projects-mcp` version — for the MCP gateway that is a normal pull request.
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
