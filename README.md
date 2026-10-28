@@ -7,6 +7,11 @@ separate project that will consume this API.
 Java 25, Spring Boot 4.1, PostgreSQL 17, Flyway, OAuth 2.0 resource server (JWT with
 issuer and audience validation). Apache-2.0.
 
+Maven multi-module build: `app/` is the runnable REST service; `projects-mcp/` is the
+MCP adapter — tool definitions plus the typed client that binds them to this REST API.
+The adapter is a library: an external MCP gateway composes it, and it never touches the
+database (it forwards the caller's token and talks HTTP only).
+
 ## Domain in one minute
 
 - **project** — `short_code` (`HP`), name, sanitized HTML content, lifecycle
