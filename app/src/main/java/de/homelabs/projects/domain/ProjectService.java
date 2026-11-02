@@ -2,6 +2,7 @@ package de.homelabs.projects.domain;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -75,12 +76,22 @@ public class ProjectService {
         return project.withLabels(labels.forEntity(EntityType.project, project.id()));
     }
 
-    /** Lean list; without a status filter only active projects are visible. */
+    /**
+     * Lean list; without a status filter only active projects are visible. The label
+     * names of the lines come from ONE batch read per call (never one query per row),
+     * ordered the same way the full record orders its labels.
+     */
     public List<ProjectSummary> find(List<ProjectStatus> statuses, String label, String query, int limit) {
         List<ProjectStatus> effective = (statuses == null || statuses.isEmpty())
                 ? ProjectStatus.defaultVisible()
                 : statuses;
-        return projects.find(effective, label, query, limit);
+        List<ProjectSummary> found = projects.find(effective, label, query, limit);
+        Map<UUID, List<Label>> byProject = labels.forEntities(EntityType.project,
+                found.stream().map(ProjectSummary::id).toList());
+        return found.stream()
+                .map(summary -> summary.withLabels(byProject.getOrDefault(summary.id(), List.of()).stream()
+                        .map(Label::name).toList()))
+                .toList();
     }
 
     @Transactional

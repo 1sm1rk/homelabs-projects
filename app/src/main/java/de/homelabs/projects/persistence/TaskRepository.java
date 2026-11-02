@@ -115,13 +115,19 @@ public class TaskRepository {
      * positions collide (ties are allowed by design). {@code includeInactiveProjects} is
      * the explicit escape hatch: without it, tasks of deactivated or archived projects
      * stay out of the list.
+     *
+     * <p>The grouping rides along in the same query: the LEFT JOIN on the task's own work
+     * package costs nothing else (the link is a plain foreign key, so it cannot multiply
+     * rows) and answers the package reference in the project's own code.
      */
     public List<ItemSummary> find(String projectCode, UUID workPackageId, List<ItemStatus> statuses,
             String assigneeSub, LocalDate dueBefore, String query, boolean includeInactiveProjects, int limit) {
         StringBuilder sql = new StringBuilder(
                 "SELECT t.id, p.short_code || '-' || t.seq AS reference, t.title, t.status, t.sort_order, "
-                        + "t.assignee_sub, t.due_date, t.description_text FROM task t "
-                        + "JOIN project p ON p.id = t.project_id WHERE TRUE");
+                        + "t.assignee_sub, t.due_date, t.description_text, t.work_package_id, "
+                        + "p.short_code || '-' || wp.seq AS work_package_reference FROM task t "
+                        + "JOIN project p ON p.id = t.project_id "
+                        + "LEFT JOIN work_package wp ON wp.id = t.work_package_id WHERE TRUE");
         Map<String, Object> params = new LinkedHashMap<>();
         if (!includeInactiveProjects) {
             sql.append(" AND p.status = 'active'");
@@ -165,7 +171,9 @@ public class TaskRepository {
                         rs.getString("assignee_sub"),
                         null,
                         rs.getObject("due_date", LocalDate.class),
-                        RichText.excerpt(rs.getString("description_text"), Search.EXCERPT_LENGTH)))
+                        RichText.excerpt(rs.getString("description_text"), Search.EXCERPT_LENGTH),
+                        rs.getObject("work_package_id", UUID.class),
+                        rs.getString("work_package_reference")))
                 .list();
     }
 

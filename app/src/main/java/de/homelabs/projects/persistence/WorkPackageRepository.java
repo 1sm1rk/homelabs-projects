@@ -105,7 +105,8 @@ public class WorkPackageRepository {
      * {@code created_at} and {@code id} tiebreaks keep the answer deterministic when
      * positions collide (ties are allowed by design). {@code includeInactiveProjects} is
      * the explicit escape hatch: without it, items of deactivated or archived projects
-     * stay out of the list.
+     * stay out of the list. Work packages live OUTSIDE the grouping they own, so the
+     * membership fields of the shared line stay {@code null}.
      */
     public List<ItemSummary> find(String shortCode, List<ItemStatus> statuses, String assigneeSub, String query,
             boolean includeInactiveProjects, int limit) {
@@ -148,7 +149,9 @@ public class WorkPackageRepository {
                         rs.getString("assignee_sub"),
                         null,
                         rs.getObject("due_date", LocalDate.class),
-                        RichText.excerpt(rs.getString("description_text"), Search.EXCERPT_LENGTH)))
+                        RichText.excerpt(rs.getString("description_text"), Search.EXCERPT_LENGTH),
+                        null,
+                        null))
                 .list();
     }
 

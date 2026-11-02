@@ -157,6 +157,52 @@ class WorkItemsApiIT extends ApiTestSupport {
         assertThat(list.body()).doesNotContain("description_html").doesNotContain("description_text");
     }
 
+    /**
+     * The lean work-item line carries the grouping of a TASK: the package's id and its
+     * reference, so a detail view can group tasks without one call per work package.
+     * Ungrouped tasks and work-package rows answer {@code null} on both fields.
+     */
+    @Test
+    void leanListsCarryTheWorkPackageMembershipOfTasks() throws Exception {
+        String token = bearerToken("it-membership-sub");
+        post("/api/projects", """
+                {"name":"Zuordnung","short_code":"ZORD"}""", token);
+        post("/api/projects", """
+                {"name":"Zuordnung leer","short_code":"ZORDL"}""", token);
+        Response pack = post("/api/projects/ZORD/work-packages", """
+                {"title":"Sammelpaket"}""", token);
+        assertThat(pack.status()).isEqualTo(201);
+        String packageId = uuidIn(pack.body()).toString();
+
+        post("/api/tasks", """
+                {"project":"ZORD","work_package_id":"ZORD-1","title":"Gruppierte Aufgabe"}""", token);
+        post("/api/tasks", """
+                {"project":"ZORDL","title":"Freie Aufgabe"}""", token);
+
+        Response grouped = get("/api/tasks?project=ZORD", token);
+        assertThat(grouped.status()).isEqualTo(200);
+        assertThat(grouped.body())
+                .contains("\"reference\":\"ZORD-2\"")
+                .contains("\"work_package_id\":\"" + packageId + "\"")
+                .contains("\"work_package_reference\":\"ZORD-1\"");
+
+        // a task without a package keeps the fields present but null
+        Response ungrouped = get("/api/tasks?project=ZORDL", token);
+        assertThat(ungrouped.status()).isEqualTo(200);
+        assertThat(ungrouped.body())
+                .contains("\"reference\":\"ZORDL-1\"")
+                .contains("\"work_package_id\":null")
+                .contains("\"work_package_reference\":null");
+
+        // work packages live outside the grouping they own: both fields stay null
+        Response packages = get("/api/work-packages?project=ZORD", token);
+        assertThat(packages.status()).isEqualTo(200);
+        assertThat(packages.body())
+                .contains("\"reference\":\"ZORD-1\"")
+                .contains("\"work_package_id\":null")
+                .contains("\"work_package_reference\":null");
+    }
+
     @Test
     void regroupKeepsTasksInsideTheirOwnProject() throws Exception {
         String token = bearerToken("it-regroup-sub");
