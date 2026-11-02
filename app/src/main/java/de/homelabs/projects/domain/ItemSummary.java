@@ -9,6 +9,9 @@ import java.util.UUID;
  * reference, title, status, position inside the project, assignee with display name,
  * due date and ~200 characters of the derived plain text. Full content is one
  * {@code GET} away.
+ *
+ * <p>{@code workPackageId}/{@code workPackageReference} carry the grouping of a TASK
+ * row only; work-package rows and ungrouped tasks answer {@code null} on both.
  */
 public record ItemSummary(
         UUID id,
@@ -19,10 +22,13 @@ public record ItemSummary(
         String assigneeSub,
         String assigneeName,
         LocalDate dueDate,
-        String excerpt) {
+        String excerpt,
+        UUID workPackageId,
+        String workPackageReference) {
 
     /** Fills the display name resolved from the local user directory at read time. */
     public ItemSummary withAssigneeName(String name) {
-        return new ItemSummary(id, reference, title, status, sortOrder, assigneeSub, name, dueDate, excerpt);
+        return new ItemSummary(id, reference, title, status, sortOrder, assigneeSub, name, dueDate, excerpt,
+                workPackageId, workPackageReference);
     }
 }

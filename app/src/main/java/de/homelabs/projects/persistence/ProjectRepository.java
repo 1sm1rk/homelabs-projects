@@ -109,6 +109,8 @@ public class ProjectRepository {
      * passes {@link ProjectStatus#defaultVisible()}, so deactivated and archived
      * projects stay out of the default view. The label filter matches on the label
      * name, case-insensitively; the free-text filter uses the three lexical arms.
+     * The label names of the line are read by {@link LabelRepository} in one batch per
+     * list call and filled in by the service.
      */
     public List<ProjectSummary> find(List<ProjectStatus> statuses, String label, String query, int limit) {
         StringBuilder sql = new StringBuilder(
@@ -138,7 +140,8 @@ public class ProjectRepository {
                         ProjectStatus.parse(rs.getString("status")),
                         rs.getString("owner_name"),
                         Rows.instant(rs, "updated_at"),
-                        RichText.excerpt(rs.getString("description_text"), Search.EXCERPT_LENGTH)))
+                        RichText.excerpt(rs.getString("description_text"), Search.EXCERPT_LENGTH),
+                        List.of()))
                 .list();
     }
 

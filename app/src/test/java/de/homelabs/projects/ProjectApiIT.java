@@ -189,6 +189,29 @@ class ProjectApiIT extends ApiTestSupport {
     }
 
     @Test
+    void leanListCarriesTheLabelNamesOfEachProject() throws Exception {
+        String token = bearerToken("it-list-label-sub");
+        post("/api/projects", """
+                {"name":"Liste markiert","short_code":"LBLIST","description":"Lesemarke mit Etiketten",
+                 "labels":["Zeta","alpha"]}""", token);
+        post("/api/projects", """
+                {"name":"Liste leer","short_code":"LBEMPT","description":"Ohnemarke ohne Etiketten"}""", token);
+
+        // the labeled line answers the names, ordered like the full record (by lower(name))
+        Response labeled = get("/api/projects?label=zeta", token);
+        assertThat(labeled.status()).isEqualTo(200);
+        assertThat(labeled.body())
+                .contains("\"reference\":\"LBLIST\"")
+                .contains("\"labels\":[\"alpha\",\"zeta\"]")
+                .doesNotContain("\"labels\":[]");
+
+        // an unlabeled project answers an EMPTY list, not null
+        Response unlabeled = get("/api/projects?q=Ohnemarke", token);
+        assertThat(unlabeled.status()).isEqualTo(200);
+        assertThat(unlabeled.body()).contains("\"reference\":\"LBEMPT\"").contains("\"labels\":[]");
+    }
+
+    @Test
     void rejectsBlankAndOverlongNames() throws Exception {
         String token = bearerToken("it-name-sub");
 
