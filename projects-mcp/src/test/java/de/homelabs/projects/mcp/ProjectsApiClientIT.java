@@ -99,14 +99,16 @@ class ProjectsApiClientIT {
         fake.on("PATCH", "/api/tasks/HP-13", 200, WireFixtures.TASK);
 
         client.updateProject("cli", "11111111-1111-1111-1111-111111111111", "Renamed", null, null, List.of());
-        client.updateWorkPackage("cli", "HP-12", null, null, null, ItemStatus.blocked, "", "", List.of());
-        client.updateTask("cli", "HP-13", null, null, null, null, null, null, "", List.of());
+        client.updateWorkPackage("cli", "HP-12", null, null, null, ItemStatus.blocked, "", "", 2, List.of());
+        client.updateTask("cli", "HP-13", null, null, null, null, null, null, "", 3, List.of());
 
         assertThat(keys(fake.call(0))).containsOnlyKeys("name", "description", "description_html", "labels");
         assertThat(keys(fake.call(1))).containsOnlyKeys("title", "description", "description_html", "status",
-                "assignee_sub", "due_date", "labels");
+                "assignee_sub", "due_date", "sort_order", "labels");
         assertThat(keys(fake.call(2))).containsOnlyKeys("title", "description", "description_html", "status",
-                "assignee_sub", "due_date", "work_package_id", "labels");
+                "assignee_sub", "due_date", "work_package_id", "sort_order", "labels");
+        assertThat(fake.call(1).body()).contains("\"sort_order\":2");
+        assertThat(fake.call(2).body()).contains("\"sort_order\":3");
         assertThat(fake.call(1).body()).contains("\"status\":\"blocked\"");
         assertThat(fake.call(2).body()).contains("\"work_package_id\":\"\"");
     }
@@ -169,14 +171,16 @@ class ProjectsApiClientIT {
                  "project_id":"11111111-1111-1111-1111-111111111111","project_short_code":"HP",
                  "title":"Adapter module","description_html":"<p>twenty tools</p>","description_text":"twenty tools",
                  "status":"todo","assignee_sub":"user-1","assignee_name":"owner","due_date":"2026-11-15","seq":12,
-                 "created_at":"2026-10-28T09:00:00Z","updated_at":"2026-10-28T09:30:00Z","labels":[]}""");
+                 "sort_order":4,"created_at":"2026-10-28T09:00:00Z","updated_at":"2026-10-28T09:30:00Z",
+                 "labels":[]}""");
         fake.on("GET", "/api/tasks/HP-13", 200, """
                 {"id":"44444444-4444-4444-4444-444444444444","reference":"HP-13",
                  "project_id":"11111111-1111-1111-1111-111111111111","project_short_code":"HP",
                  "work_package_id":"33333333-3333-3333-3333-333333333333","work_package_reference":"HP-12",
                  "title":"Write the client","description_html":"<p>body</p>","description_text":"body",
                  "status":"in_progress","assignee_sub":"user-1","assignee_name":"owner","due_date":"2026-11-01",
-                 "seq":13,"created_at":"2026-10-28T09:00:00Z","updated_at":"2026-10-28T09:40:00Z","labels":[]}""");
+                 "seq":13,"sort_order":6,"created_at":"2026-10-28T09:00:00Z","updated_at":"2026-10-28T09:40:00Z",
+                 "labels":[]}""");
 
         WorkPackageDto workPackage = client.getWorkPackage("HP-12");
         TaskDto task = client.getTask("HP-13");
@@ -185,7 +189,9 @@ class ProjectsApiClientIT {
         assertThat(workPackage.assigneeName()).isEqualTo("owner");
         assertThat(workPackage.dueDate()).isEqualTo(java.time.LocalDate.parse("2026-11-15"));
         assertThat(workPackage.seq()).isEqualTo(12);
+        assertThat(workPackage.sortOrder()).isEqualTo(4);
         assertThat(task.workPackageReference()).isEqualTo("HP-12");
+        assertThat(task.sortOrder()).isEqualTo(6);
         assertThat(task.status()).isEqualTo(ItemStatus.in_progress);
         assertThat(task.seq()).isEqualTo(13);
     }
@@ -197,7 +203,8 @@ class ProjectsApiClientIT {
                   "status":"active","owner_name":"owner","updated_at":"2026-10-28T09:30:00Z","excerpt":"ex"}]""");
         fake.on("GET", "/api/tasks", 200, """
                 [{"id":"44444444-4444-4444-4444-444444444444","reference":"HP-13","title":"Write the client",
-                  "status":"done","assignee_sub":null,"assignee_name":null,"due_date":null,"excerpt":"body"}]""");
+                  "status":"done","sort_order":2,"assignee_sub":null,"assignee_name":null,"due_date":null,
+                  "excerpt":"body"}]""");
         fake.on("GET", "/api/activities", 200, """
                 [{"id":"66666666-6666-6666-6666-666666666666","entity_type":"task",
                   "entity_id":"44444444-4444-4444-4444-444444444444","actor_sub":"user-1","actor_name":"owner",

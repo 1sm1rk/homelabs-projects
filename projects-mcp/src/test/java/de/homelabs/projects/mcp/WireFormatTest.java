@@ -55,12 +55,13 @@ class WireFormatTest {
     void workPackageCommandsCarryTheSnakeCaseNames() {
         assertThat(keys(write(new ProjectsApiClient.StoreWorkPackageCommand("t", "d", null, "user-1",
                 "2026-11-15", null))))
-                .containsOnlyKeys("title", "description", "description_html", "assignee_sub", "due_date", "labels");
+                .containsOnlyKeys("title", "description", "description_html", "assignee_sub", "due_date", "labels")
+                .doesNotContainKey("sort_order");
 
         assertThat(keys(write(new ProjectsApiClient.UpdateWorkPackageCommand("t", null, null, ItemStatus.blocked,
-                "", "", List.of()))))
+                "", "", 3, List.of()))))
                 .containsOnlyKeys("title", "description", "description_html", "status", "assignee_sub", "due_date",
-                        "labels");
+                        "sort_order", "labels");
     }
 
     @Test
@@ -68,12 +69,34 @@ class WireFormatTest {
         assertThat(keys(write(new ProjectsApiClient.StoreTaskCommand("t", null, null, "HP", "HP-12", "user-1",
                 "2026-11-01", List.of()))))
                 .containsOnlyKeys("title", "description", "description_html", "project", "work_package_id",
-                        "assignee_sub", "due_date", "labels");
+                        "assignee_sub", "due_date", "labels")
+                .doesNotContainKey("sort_order");
 
-        assertThat(keys(write(new ProjectsApiClient.UpdateTaskCommand(null, null, null, null, null, null, "",
+        assertThat(keys(write(new ProjectsApiClient.UpdateTaskCommand(null, null, null, null, null, null, "", 7,
                 null))))
                 .containsOnlyKeys("title", "description", "description_html", "status", "assignee_sub", "due_date",
-                        "work_package_id", "labels");
+                        "work_package_id", "sort_order", "labels");
+    }
+
+    /**
+     * The reorder payload: an explicit position reaches the API under the DB vocabulary, and
+     * "leave it alone" stays a JSON null (the tri-state of the PATCH body).
+     */
+    @Test
+    void updateCommandsCarrySortOrderAsTheSnakeCaseKey() {
+        assertThat(keys(write(new ProjectsApiClient.UpdateTaskCommand(null, null, null, null, null, null, null, 1,
+                null))))
+                .containsEntry("sort_order", 1);
+        assertThat(keys(write(new ProjectsApiClient.UpdateWorkPackageCommand(null, null, null, null, null, null, 12,
+                null))))
+                .containsEntry("sort_order", 12);
+
+        assertThat(keys(write(new ProjectsApiClient.UpdateTaskCommand(null, "d", null, null, null, null, null, null,
+                null))))
+                .containsEntry("sort_order", null);
+        assertThat(keys(write(new ProjectsApiClient.UpdateWorkPackageCommand(null, "d", null, null, null, null, null,
+                null))))
+                .containsEntry("sort_order", null);
     }
 
     @Test
@@ -107,11 +130,13 @@ class WireFormatTest {
         assertThat(workPackage.descriptionHtml()).isEqualTo("<p>twenty tools</p>");
         assertThat(workPackage.dueDate()).isEqualTo(java.time.LocalDate.parse("2026-11-15"));
         assertThat(workPackage.seq()).isEqualTo(12);
+        assertThat(workPackage.sortOrder()).isEqualTo(4);
         assertThat(task.workPackageId()).isEqualTo(workPackage.id());
         assertThat(task.workPackageReference()).isEqualTo("HP-12");
         assertThat(task.assigneeSub()).isEqualTo("user-1");
         assertThat(task.assigneeName()).isEqualTo("owner");
         assertThat(task.seq()).isEqualTo(13);
+        assertThat(task.sortOrder()).isEqualTo(6);
     }
 
     @Test
@@ -122,13 +147,14 @@ class WireFormatTest {
                 ProjectSummaryDto.class);
         ItemSummaryDto item = mapper.readValue("""
                 {"id":"44444444-4444-4444-4444-444444444444","reference":"HP-13","title":"Write the client",
-                 "status":"in_progress","assignee_sub":"user-1","assignee_name":"owner",
+                 "status":"in_progress","sort_order":2,"assignee_sub":"user-1","assignee_name":"owner",
                  "due_date":"2026-11-01","excerpt":"body"}""", ItemSummaryDto.class);
 
         assertThat(project.status()).isEqualTo(ProjectStatus.deactivated);
         assertThat(project.ownerName()).isEqualTo("owner");
         assertThat(item.assigneeName()).isEqualTo("owner");
         assertThat(item.dueDate()).isEqualTo(java.time.LocalDate.parse("2026-11-01"));
+        assertThat(item.sortOrder()).isEqualTo(2);
     }
 
     @Test
@@ -170,6 +196,8 @@ class WireFormatTest {
 
         assertThat(keys(write(project))).containsKeys("short_code", "description_html", "description_text", "owner_sub",
                 "owner_name", "created_at", "updated_at");
+        assertThat(keys(write(mapper.readValue(WireFixtures.TASK, TaskDto.class))))
+                .containsEntry("sort_order", 6);
         assertThat(keys(write(attachment))).containsKeys("entity_type", "entity_id", "mime_type", "byte_size",
                 "uploaded_by_sub", "uploaded_by_name", "created_at");
         assertThat(write(label)).isEqualTo("{\"id\":\"" + label.id() + "\",\"name\":\"infra\",\"color\":null}");

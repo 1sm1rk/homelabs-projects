@@ -8,7 +8,8 @@ import java.util.UUID;
 /**
  * A work package as returned by the single-resource read: full canonical content,
  * status, optional assignee (with the display name resolved from the local user
- * directory) and due date, its reference ({@code HP-12}) and its labels.
+ * directory) and due date, its reference ({@code HP-12}), its mutable position inside
+ * the project ({@code sortOrder}) and its labels.
  */
 public record WorkPackage(
         UUID id,
@@ -23,6 +24,7 @@ public record WorkPackage(
         String assigneeName,
         LocalDate dueDate,
         int seq,
+        int sortOrder,
         Instant createdAt,
         Instant updatedAt,
         List<Label> labels) {
@@ -33,12 +35,13 @@ public record WorkPackage(
 
     public WorkPackage withLabels(List<Label> labels) {
         return new WorkPackage(id, reference, projectId, projectShortCode, title, descriptionHtml,
-                descriptionText, status, assigneeSub, assigneeName, dueDate, seq, createdAt, updatedAt, labels);
+                descriptionText, status, assigneeSub, assigneeName, dueDate, seq, sortOrder, createdAt, updatedAt,
+                labels);
     }
 
     /** Fills the display name resolved from the local user directory at read time. */
     public WorkPackage withAssigneeName(String name) {
         return new WorkPackage(id, reference, projectId, projectShortCode, title, descriptionHtml,
-                descriptionText, status, assigneeSub, name, dueDate, seq, createdAt, updatedAt, labels);
+                descriptionText, status, assigneeSub, name, dueDate, seq, sortOrder, createdAt, updatedAt, labels);
     }
 }

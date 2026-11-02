@@ -78,7 +78,7 @@ public class WorkPackageController {
             @AuthenticationPrincipal Jwt jwt) {
         return workPackages.update(ApiSupport.caller(jwt, source), idOrRef, new WorkPackageService.Update(
                 request.title(), request.description(), request.descriptionHtml(), request.status(),
-                request.assigneeSub(), request.dueDate(), request.labels()));
+                request.assigneeSub(), request.dueDate(), request.sortOrder(), request.labels()));
     }
 
     /** Body of {@code POST /api/projects/{idOrCode}/work-packages}. */
@@ -91,7 +91,11 @@ public class WorkPackageController {
             List<String> labels) {
     }
 
-    /** Body of {@code PATCH /api/work-packages/{idOrRef}}; absent fields stay unchanged. */
+    /**
+     * Body of {@code PATCH /api/work-packages/{idOrRef}}; absent fields stay unchanged.
+     * {@code sortOrder} moves the package inside its project (1 = first); there is no
+     * "clear" — the column is NOT NULL, so null always means "unchanged".
+     */
     public record UpdateWorkPackageRequest(
             @Size(max = 200) String title,
             String description,
@@ -99,6 +103,7 @@ public class WorkPackageController {
             ItemStatus status,
             String assigneeSub,
             String dueDate,
+            Integer sortOrder,
             List<String> labels) {
     }
 }

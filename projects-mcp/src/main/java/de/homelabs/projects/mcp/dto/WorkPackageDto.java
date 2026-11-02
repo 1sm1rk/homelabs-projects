@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /**
  * Wire shape of one work package as the REST API returns it: full canonical content,
  * status, optional assignee (with display name), due date, its reference
- * ({@code HP-12}) and its labels.
+ * ({@code HP-12}), its mutable position inside the project and its labels.
  */
 public record WorkPackageDto(
         UUID id,
@@ -25,6 +25,7 @@ public record WorkPackageDto(
         @JsonProperty("assignee_name") String assigneeName,
         @JsonProperty("due_date") LocalDate dueDate,
         int seq,
+        @JsonProperty("sort_order") int sortOrder,
         @JsonProperty("created_at") Instant createdAt,
         @JsonProperty("updated_at") Instant updatedAt,
         List<LabelDto> labels) {

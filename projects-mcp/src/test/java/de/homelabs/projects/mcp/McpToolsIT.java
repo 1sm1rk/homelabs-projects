@@ -191,7 +191,8 @@ class McpToolsIT {
         assertThat(call.body()).contains("\"title\":\"Adapter module\"")
                 .contains("\"due_date\":\"2026-11-15\"")
                 .doesNotContain("\"project\"")
-                .doesNotContain("dueDate");
+                .doesNotContain("dueDate")
+                .doesNotContain("sort_order");
     }
 
     @Test
@@ -210,8 +211,8 @@ class McpToolsIT {
     void findWorkPackagesSendsRepeatedStatusesAndFilters() {
         fake.on("GET", "/api/work-packages", 200, """
                 [{"id":"33333333-3333-3333-3333-333333333333","reference":"HP-12","title":"Adapter module",
-                  "status":"blocked","assignee_sub":"user-1","assignee_name":"owner","due_date":"2026-11-15",
-                  "excerpt":"twenty tools"}]""");
+                  "status":"blocked","sort_order":1,"assignee_sub":"user-1","assignee_name":"owner",
+                  "due_date":"2026-11-15","excerpt":"twenty tools"}]""");
 
         List<ItemSummaryDto> items = workItemTools.find_work_packages("HP",
                 List.of(ItemStatus.todo, ItemStatus.blocked), "me", "adapter", 10);
@@ -219,6 +220,7 @@ class McpToolsIT {
         assertThat(items).singleElement().satisfies(item -> {
             assertThat(item.status()).isEqualTo(ItemStatus.blocked);
             assertThat(item.assigneeName()).isEqualTo("owner");
+            assertThat(item.sortOrder()).isEqualTo(1);
         });
         assertThat(fake.onlyCall().query())
                 .contains("project=HP")
@@ -234,7 +236,7 @@ class McpToolsIT {
         fake.on("PATCH", "/api/work-packages/HP-12", 200, WireFixtures.WORK_PACKAGE);
 
         workItemTools.update_work_package(exchange("cli"), "HP-12", null, null, null,
-                ItemStatus.in_progress, "", "", List.of());
+                ItemStatus.in_progress, "", "", null, List.of());
 
         FakeProjectsApi.Call call = fake.onlyCall();
         assertThat(call.method()).isEqualTo("PATCH");
@@ -244,6 +246,23 @@ class McpToolsIT {
                 .contains("\"due_date\":\"\"")
                 .contains("\"labels\":[]")
                 .doesNotContain("IN_PROGRESS");
+    }
+
+    /**
+     * The ordering parameter is optional and travels as the API's own vocabulary; omitting it
+     * sends a null, which the PATCH semantics read as "leave the position alone".
+     */
+    @Test
+    void updateWorkPackageSendsSortOrderAndLeavesItNullWhenOmitted() {
+        fake.on("PATCH", "/api/work-packages/HP-12", 200, WireFixtures.WORK_PACKAGE);
+
+        workItemTools.update_work_package(exchange("cli"), "HP-12", null, null, null, null, null, null, 1, null);
+        workItemTools.update_work_package(exchange("cli"), "HP-12", "Retitled", null, null, null, null, null, null,
+                null);
+
+        assertThat(fake.calls()).hasSize(2);
+        assertThat(fake.call(0).body()).contains("\"sort_order\":1").doesNotContain("sortOrder");
+        assertThat(fake.call(1).body()).contains("\"sort_order\":null").contains("\"title\":\"Retitled\"");
     }
 
     @Test
@@ -265,7 +284,8 @@ class McpToolsIT {
                 .contains("\"assignee_sub\":\"user-1\"")
                 .contains("\"due_date\":\"2026-11-01\"")
                 .doesNotContain("workPackageId")
-                .doesNotContain("assigneeSub");
+                .doesNotContain("assigneeSub")
+                .doesNotContain("sort_order");
     }
 
     @Test
@@ -284,14 +304,16 @@ class McpToolsIT {
     void findTasksSendsDueBeforeAndTheMeFilter() {
         fake.on("GET", "/api/tasks", 200, """
                 [{"id":"44444444-4444-4444-4444-444444444444","reference":"HP-13","title":"Write the client",
-                  "status":"in_progress","assignee_sub":"user-1","assignee_name":"owner",
+                  "status":"in_progress","sort_order":2,"assignee_sub":"user-1","assignee_name":"owner",
                   "due_date":"2026-11-01","excerpt":"body"}]""");
 
         List<ItemSummaryDto> tasks = workItemTools.find_tasks("HP", "HP-12",
                 List.of(ItemStatus.todo, ItemStatus.in_progress), "me", "2026-11-30", "client", 5);
 
-        assertThat(tasks).singleElement().satisfies(task -> assertThat(task.dueDate())
-                .isEqualTo(java.time.LocalDate.parse("2026-11-01")));
+        assertThat(tasks).singleElement().satisfies(task -> {
+            assertThat(task.dueDate()).isEqualTo(java.time.LocalDate.parse("2026-11-01"));
+            assertThat(task.sortOrder()).isEqualTo(2);
+        });
         assertThat(fake.onlyCall().query())
                 .contains("project=HP")
                 .contains("wp=HP-12")
@@ -308,7 +330,7 @@ class McpToolsIT {
         fake.on("PATCH", "/api/tasks/HP-13", 200, WireFixtures.TASK);
 
         workItemTools.update_task(exchange("cli"), "HP-13", "Retitled", null, null, ItemStatus.done, "",
-                null, null, null);
+                null, null, null, null);
 
         FakeProjectsApi.Call call = fake.onlyCall();
         assertThat(call.method()).isEqualTo("PATCH");
@@ -318,6 +340,18 @@ class McpToolsIT {
                 .contains("\"status\":\"done\"")
                 .contains("\"work_package_id\":\"\"")
                 .contains("\"assignee_sub\":null");
+    }
+
+    @Test
+    void updateTaskSendsSortOrderAndLeavesItNullWhenOmitted() {
+        fake.on("PATCH", "/api/tasks/HP-13", 200, WireFixtures.TASK);
+
+        workItemTools.update_task(exchange("cli"), "HP-13", null, null, null, null, null, null, null, 9, null);
+        workItemTools.update_task(exchange("cli"), "HP-13", "Retitled", null, null, null, null, null, null, null, null);
+
+        assertThat(fake.calls()).hasSize(2);
+        assertThat(fake.call(0).body()).contains("\"sort_order\":9").doesNotContain("sortOrder");
+        assertThat(fake.call(1).body()).contains("\"sort_order\":null").contains("\"title\":\"Retitled\"");
     }
 
     @Test
@@ -430,7 +464,7 @@ class McpToolsIT {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("no project UNKNOWN");
         assertThatThrownBy(() -> workItemTools.update_task(exchange("cli"), "HP-13", "x", null, null, null,
-                null, null, null, null))
+                null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("project HP is archived: the project and everything under it is read-only");
         assertThatThrownBy(() -> workItemTools.store_task(exchange("cli"), "HP", null, "", null, null, null,

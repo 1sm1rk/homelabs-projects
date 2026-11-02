@@ -9,8 +9,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Wire shape of one task as the REST API returns it: full canonical content, status,
- * optional assignee (with display name), due date, reference, the group it belongs to
- * and its labels.
+ * optional assignee (with display name), due date, reference, the group it belongs to,
+ * its mutable position inside the project and its labels.
  */
 public record TaskDto(
         UUID id,
@@ -27,6 +27,7 @@ public record TaskDto(
         @JsonProperty("assignee_name") String assigneeName,
         @JsonProperty("due_date") LocalDate dueDate,
         int seq,
+        @JsonProperty("sort_order") int sortOrder,
         @JsonProperty("created_at") Instant createdAt,
         @JsonProperty("updated_at") Instant updatedAt,
         List<LabelDto> labels) {

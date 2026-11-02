@@ -46,7 +46,7 @@ public class WorkPackageService {
 
     /** Input of {@code PATCH /api/work-packages/{idOrRef}}; {@code null} means "unchanged". */
     public record Update(String title, String description, String descriptionHtml, ItemStatus status,
-            String assigneeSub, String dueDate, List<String> labels) {
+            String assigneeSub, String dueDate, Integer sortOrder, List<String> labels) {
     }
 
     /** Input of {@code GET /api/work-packages}. */
@@ -60,9 +60,12 @@ public class WorkPackageService {
         RichText.Content content = RichText.canonicalize(command.description(), command.descriptionHtml());
 
         UUID id = UUID.randomUUID();
+        // The counter first: its UPDATE locks the project row, which is what serializes two
+        // creates of the same project before both read the sort_order maximum.
         int seq = projects.nextSeq(project.id());
-        workPackages.insert(id, project.id(), seq, command.title().strip(), content.html(), content.text(),
-                ItemStatus.todo, Values.trimToNull(command.assigneeSub()),
+        int sortOrder = workPackages.nextSortOrder(project.id());
+        workPackages.insert(id, project.id(), seq, sortOrder, command.title().strip(), content.html(),
+                content.text(), ItemStatus.todo, Values.trimToNull(command.assigneeSub()),
                 Values.parseDate(command.dueDate(), "due_date"));
         activities.record(caller, EntityType.work_package, id, ActivityService.CREATED, null);
         assignLabels(caller, id, command.labels());
@@ -129,15 +132,25 @@ public class WorkPackageService {
                 changes.add(new ActivityDetail.Change("due_date", next == null ? "none" : next.toString()));
             }
         }
+        int sortOrder = item.sortOrder();
+        if (command.sortOrder() != null) {
+            if (command.sortOrder() < 1) {
+                throw new IllegalArgumentException("sort_order must be at least 1");
+            }
+            if (command.sortOrder() != item.sortOrder()) {
+                sortOrder = command.sortOrder();
+                changes.add(new ActivityDetail.Change("sort_order", Integer.toString(sortOrder)));
+            }
+        }
         boolean statusChanged = command.status() != null && command.status() != item.status();
         boolean labelsGiven = command.labels() != null;
         if (changes.isEmpty() && !statusChanged && !labelsGiven) {
             throw new IllegalArgumentException("nothing to change: pass at least one of title, description, "
-                    + "description_html, status, assignee_sub, due_date, labels");
+                    + "description_html, status, assignee_sub, due_date, sort_order, labels");
         }
         if (!changes.isEmpty() || statusChanged) {
             ItemStatus status = statusChanged ? command.status() : item.status();
-            workPackages.update(item.id(), title, html, text, status, assignee, dueDate);
+            workPackages.update(item.id(), sortOrder, title, html, text, status, assignee, dueDate);
             if (!changes.isEmpty()) {
                 activities.record(caller, EntityType.work_package, item.id(), ActivityService.UPDATED,
                         ActivityDetail.changed(changes));

@@ -140,10 +140,11 @@ public class ProjectsApiClient {
     }
 
     WorkPackageDto updateWorkPackage(String source, String idOrRef, String title, String description,
-            String descriptionHtml, ItemStatus status, String assigneeSub, String dueDate, List<String> labels) {
+            String descriptionHtml, ItemStatus status, String assigneeSub, String dueDate, Integer sortOrder,
+            List<String> labels) {
         return body(write(HttpMethod.PATCH, source, "/api/work-packages/{idOrRef}", idOrRef)
                 .body(new UpdateWorkPackageCommand(title, description, descriptionHtml, status, assigneeSub,
-                        dueDate, labels)), WorkPackageDto.class);
+                        dueDate, sortOrder, labels)), WorkPackageDto.class);
     }
 
     // --- tasks -----------------------------------------------------------------
@@ -177,10 +178,11 @@ public class ProjectsApiClient {
     }
 
     TaskDto updateTask(String source, String idOrRef, String title, String description, String descriptionHtml,
-            ItemStatus status, String assigneeSub, String dueDate, String workPackageId, List<String> labels) {
+            ItemStatus status, String assigneeSub, String dueDate, String workPackageId, Integer sortOrder,
+            List<String> labels) {
         return body(write(HttpMethod.PATCH, source, "/api/tasks/{idOrRef}", idOrRef)
                 .body(new UpdateTaskCommand(title, description, descriptionHtml, status, assigneeSub, dueDate,
-                        workPackageId, labels)), TaskDto.class);
+                        workPackageId, sortOrder, labels)), TaskDto.class);
     }
 
     // --- comments, activity, labels, attachments -------------------------------
@@ -333,6 +335,7 @@ public class ProjectsApiClient {
             ItemStatus status,
             @JsonProperty("assignee_sub") String assigneeSub,
             @JsonProperty("due_date") String dueDate,
+            @JsonProperty("sort_order") Integer sortOrder,
             List<String> labels) {
     }
 
@@ -357,6 +360,7 @@ public class ProjectsApiClient {
             @JsonProperty("assignee_sub") String assigneeSub,
             @JsonProperty("due_date") String dueDate,
             @JsonProperty("work_package_id") String workPackageId,
+            @JsonProperty("sort_order") Integer sortOrder,
             List<String> labels) {
     }
 

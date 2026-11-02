@@ -58,7 +58,7 @@ public class WorkItemTools {
         return api.getWorkPackage(id_or_ref);
     }
 
-    @McpTool(description = "Lean list of work packages, newest activity first: reference, title, status, assignee, due date and a ~200-character excerpt. "
+    @McpTool(description = "Lean list of work packages in plan order — lowest sort_order first: reference, title, status, sort_order, assignee, due date and a ~200-character excerpt. "
             + "Use it to see what a project contains or what is still open. "
             + "status accepts several values in one call, so ask for open work as todo and in_progress together. "
             + "assignee takes a user's subject or the literal 'me' for the calling user. "
@@ -73,10 +73,11 @@ public class WorkItemTools {
         return api.findWorkPackages(project, status, assignee, q, limit);
     }
 
-    @McpTool(description = "Change an existing work package: title, description, status, assignee, due date, labels. "
-            + "Use it to complete, retitle, reassign or relabel an item that exists — never store a duplicate. "
+    @McpTool(description = "Change an existing work package: title, description, status, assignee, due date, sort_order, labels. "
+            + "Use it to complete, retitle, reassign, reorder or relabel an item that exists — never store a duplicate. "
             + "Pass only the fields that change; fields you leave out stay as they are. "
             + "An empty string clears assignee_sub or due_date; labels replace the whole set and an empty list removes all of them. "
+            + "sort_order moves the package inside its project and has no clear — omit it to leave the position alone. "
             + "The project of a work package never changes. "
             + "Writes to a work package of an archived project are rejected. "
             + "The reply is the full record.")
@@ -89,9 +90,10 @@ public class WorkItemTools {
             @McpToolParam(description = "New status; omit to keep the current one", required = false) ItemStatus status,
             @McpToolParam(description = "Subject of the user to assign; empty string clears the assignee", required = false) String assignee_sub,
             @McpToolParam(description = "Due date as ISO date (yyyy-mm-dd); empty string clears it", required = false) String due_date,
+            @McpToolParam(description = "Position inside the project, 1 or higher (1 = first); omit to keep the current one", required = false) Integer sort_order,
             @McpToolParam(description = "Replacement label set; omit to keep the current labels", required = false) List<String> labels) {
         return api.updateWorkPackage(McpClientIdentity.source(exchange), id_or_ref, title, description,
-                description_html, status, assignee_sub, due_date, labels);
+                description_html, status, assignee_sub, due_date, sort_order, labels);
     }
 
     // --- tasks -----------------------------------------------------------------
@@ -125,8 +127,8 @@ public class WorkItemTools {
         return api.getTask(id_or_ref);
     }
 
-    @McpTool(description = "Lean list of tasks, newest activity first: reference, title, status, assignee, due date and a ~200-character excerpt. "
-            + "Use it for what is open, what is mine and what is due. "
+    @McpTool(description = "Lean list of tasks in plan order — lowest sort_order first: reference, title, status, sort_order, assignee, due date and a ~200-character excerpt. "
+            + "Use it for what is next, what is open, what is mine and what is due. "
             + "assignee takes the literal 'me' for the calling user — that is the 'mine' query. "
             + "due_before is an ISO date and includes everything due up to that day; use it when planning a week. "
             + "status accepts several values in one call, so ask for open work as todo and in_progress together. "
@@ -143,10 +145,11 @@ public class WorkItemTools {
         return api.findTasks(project, wp, status, assignee, due_before, q, limit);
     }
 
-    @McpTool(description = "Change an existing task: title, description, status, grouping, assignee, due date, labels. "
-            + "Use it to complete, retitle, regroup or reassign a task that exists — never store a duplicate. "
+    @McpTool(description = "Change an existing task: title, description, status, grouping, assignee, due date, sort_order, labels. "
+            + "Use it to complete, retitle, regroup, reorder or reassign a task that exists — never store a duplicate. "
             + "Pass only the fields that change; fields you leave out stay as they are. "
             + "An empty string clears work_package, assignee_sub or due_date; labels replace the whole set and an empty list removes all of them. "
+            + "sort_order moves the task inside its project and has no clear — omit it to leave the position alone. "
             + "A task never changes its project, and a work package must belong to the task's own project. "
             + "Writes to a task of an archived project are rejected. "
             + "The reply is the full record with the work package reference it landed in.")
@@ -160,8 +163,9 @@ public class WorkItemTools {
             @McpToolParam(description = "Work package id or reference (HP-12) of the same project; empty string removes the grouping", required = false) String work_package,
             @McpToolParam(description = "Subject of the user to assign; empty string clears the assignee", required = false) String assignee_sub,
             @McpToolParam(description = "Due date as ISO date (yyyy-mm-dd); empty string clears it", required = false) String due_date,
+            @McpToolParam(description = "Position inside the project, 1 or higher (1 = first); omit to keep the current one", required = false) Integer sort_order,
             @McpToolParam(description = "Replacement label set; omit to keep the current labels", required = false) List<String> labels) {
         return api.updateTask(McpClientIdentity.source(exchange), id_or_ref, title, description, description_html, status,
-                assignee_sub, due_date, work_package, labels);
+                assignee_sub, due_date, work_package, sort_order, labels);
     }
 }

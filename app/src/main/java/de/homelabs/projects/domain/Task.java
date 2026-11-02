@@ -8,7 +8,8 @@ import java.util.UUID;
 /**
  * A task as returned by the single-resource read. It always belongs to a project
  * and may be (re)grouped into one of that project's work packages — the reference
- * of the group travels along so an agent needs no second lookup.
+ * of the group travels along so an agent needs no second lookup. {@code seq} is the
+ * reference number, {@code sortOrder} the mutable position inside the project.
  */
 public record Task(
         UUID id,
@@ -25,6 +26,7 @@ public record Task(
         String assigneeName,
         LocalDate dueDate,
         int seq,
+        int sortOrder,
         Instant createdAt,
         Instant updatedAt,
         List<Label> labels) {
@@ -35,14 +37,14 @@ public record Task(
 
     public Task withLabels(List<Label> labels) {
         return new Task(id, reference, projectId, projectShortCode, workPackageId, workPackageReference, title,
-                descriptionHtml, descriptionText, status, assigneeSub, assigneeName, dueDate, seq, createdAt,
-                updatedAt, labels);
+                descriptionHtml, descriptionText, status, assigneeSub, assigneeName, dueDate, seq, sortOrder,
+                createdAt, updatedAt, labels);
     }
 
     /** Fills the display name resolved from the local user directory at read time. */
     public Task withAssigneeName(String name) {
         return new Task(id, reference, projectId, projectShortCode, workPackageId, workPackageReference, title,
-                descriptionHtml, descriptionText, status, assigneeSub, name, dueDate, seq, createdAt, updatedAt,
-                labels);
+                descriptionHtml, descriptionText, status, assigneeSub, name, dueDate, seq, sortOrder, createdAt,
+                updatedAt, labels);
     }
 }

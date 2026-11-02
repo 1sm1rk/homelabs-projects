@@ -21,13 +21,16 @@ import de.homelabs.projects.domain.WorkPackage;
  * JDBC access to work packages. The reference number comes from the project's
  * shared counter ({@link ProjectRepository#nextSeq}) inside the create transaction;
  * the per-project sequence is unique across work packages AND tasks.
+ *
+ * <p>{@code sort_order} is a sequence of its own: {@link #nextSortOrder} counts work
+ * packages only, so they number 1..m while the project's tasks number 1..n.
  */
 @Repository
 public class WorkPackageRepository {
 
     private static final String COLUMNS = "w.id, w.project_id, p.short_code AS project_code, w.title, "
             + "w.description_html, w.description_text, w.status, w.assignee_sub, w.due_date, w.seq, "
-            + "w.created_at, w.updated_at";
+            + "w.sort_order, w.created_at, w.updated_at";
 
     private final JdbcClient jdbc;
 
@@ -35,13 +38,26 @@ public class WorkPackageRepository {
         this.jdbc = jdbc;
     }
 
-    public void insert(UUID id, UUID projectId, int seq, String title, String descriptionHtml,
+    /**
+     * The next ordering value inside the project: current max + 1, starting at 1. Callers
+     * run inside the create transaction and after the project's counter has locked the
+     * project row, so two creates of the same project cannot read the same maximum.
+     */
+    public int nextSortOrder(UUID projectId) {
+        return jdbc.sql("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM work_package WHERE project_id = ?")
+                .param(projectId)
+                .query(Integer.class)
+                .single();
+    }
+
+    public void insert(UUID id, UUID projectId, int seq, int sortOrder, String title, String descriptionHtml,
             String descriptionText, ItemStatus status, String assigneeSub, LocalDate dueDate) {
-        jdbc.sql("INSERT INTO work_package (id, project_id, seq, title, description_html, description_text, status, "
-                        + "assignee_sub, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        jdbc.sql("INSERT INTO work_package (id, project_id, seq, sort_order, title, description_html, "
+                        + "description_text, status, assignee_sub, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 .param(id)
                 .param(projectId)
                 .param(seq)
+                .param(sortOrder)
                 .param(title)
                 .param(descriptionHtml)
                 .param(descriptionText)
@@ -69,10 +85,11 @@ public class WorkPackageRepository {
                 .optional();
     }
 
-    public void update(UUID id, String title, String descriptionHtml, String descriptionText, ItemStatus status,
-            String assigneeSub, LocalDate dueDate) {
-        jdbc.sql("UPDATE work_package SET title = ?, description_html = ?, description_text = ?, status = ?, "
-                        + "assignee_sub = ?, due_date = ?, updated_at = now() WHERE id = ?")
+    public void update(UUID id, int sortOrder, String title, String descriptionHtml, String descriptionText,
+            ItemStatus status, String assigneeSub, LocalDate dueDate) {
+        jdbc.sql("UPDATE work_package SET sort_order = ?, title = ?, description_html = ?, description_text = ?, "
+                        + "status = ?, assignee_sub = ?, due_date = ?, updated_at = now() WHERE id = ?")
+                .param(sortOrder)
                 .param(title)
                 .param(descriptionHtml)
                 .param(descriptionText)
@@ -84,15 +101,17 @@ public class WorkPackageRepository {
     }
 
     /**
-     * Lean work-package list. {@code includeInactiveProjects} is the explicit escape
-     * hatch: without it, items of deactivated or archived projects stay out of the
-     * list.
+     * Lean work-package list, ordered by the item's own position inside its project. The
+     * {@code created_at} and {@code id} tiebreaks keep the answer deterministic when
+     * positions collide (ties are allowed by design). {@code includeInactiveProjects} is
+     * the explicit escape hatch: without it, items of deactivated or archived projects
+     * stay out of the list.
      */
     public List<ItemSummary> find(String shortCode, List<ItemStatus> statuses, String assigneeSub, String query,
             boolean includeInactiveProjects, int limit) {
         StringBuilder sql = new StringBuilder(
-                "SELECT w.id, p.short_code || '-' || w.seq AS reference, w.title, w.status, w.assignee_sub, "
-                        + "w.due_date, w.description_text FROM work_package w "
+                "SELECT w.id, p.short_code || '-' || w.seq AS reference, w.title, w.status, w.sort_order, "
+                        + "w.assignee_sub, w.due_date, w.description_text FROM work_package w "
                         + "JOIN project p ON p.id = w.project_id WHERE TRUE");
         Map<String, Object> params = new LinkedHashMap<>();
         if (!includeInactiveProjects) {
@@ -116,7 +135,7 @@ public class WorkPackageRepository {
             params.put("like", Search.like(query));
             params.put("query", query);
         }
-        sql.append(" ORDER BY w.created_at DESC, w.seq DESC LIMIT :limit");
+        sql.append(" ORDER BY w.sort_order ASC, w.created_at ASC, w.id ASC LIMIT :limit");
         params.put("limit", limit);
         return jdbc.sql(sql.toString())
                 .params(params)
@@ -125,6 +144,7 @@ public class WorkPackageRepository {
                         rs.getString("reference"),
                         rs.getString("title"),
                         ItemStatus.parse(rs.getString("status")),
+                        rs.getInt("sort_order"),
                         rs.getString("assignee_sub"),
                         null,
                         rs.getObject("due_date", LocalDate.class),
@@ -148,6 +168,7 @@ public class WorkPackageRepository {
                 null,
                 rs.getObject("due_date", LocalDate.class),
                 seq,
+                rs.getInt("sort_order"),
                 Rows.instant(rs, "created_at"),
                 Rows.instant(rs, "updated_at"),
                 List.of());

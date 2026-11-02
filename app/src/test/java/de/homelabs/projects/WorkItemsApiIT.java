@@ -197,6 +197,139 @@ class WorkItemsApiIT extends ApiTestSupport {
         assertThat(cleared.body()).contains("\"assignee_sub\":null").contains("\"due_date\":null");
     }
 
+    /**
+     * Creates assign the position server-side: max + 1 inside the project, and the
+     * task and work-package sequences count independently (both start at 1). A second
+     * project starts its own sequences at 1.
+     */
+    @Test
+    void assignsSortOrderPerTableInsideEachProject() throws Exception {
+        String token = bearerToken("it-sort-create-sub");
+        post("/api/projects", """
+                {"name":"Reihenfolge","short_code":"ORD"}""", token);
+        post("/api/projects", """
+                {"name":"Reihenfolge zwei","short_code":"ORD2"}""", token);
+
+        Response firstPack = post("/api/projects/ORD/work-packages", """
+                {"title":"Paket eins"}""", token);
+        Response secondPack = post("/api/projects/ORD2/work-packages", """
+                {"title":"Paket zwei"}""", token);
+        Response firstTask = post("/api/tasks", """
+                {"project":"ORD","title":"Aufgabe eins"}""", token);
+        Response secondTask = post("/api/tasks", """
+                {"project":"ORD","title":"Aufgabe zwei"}""", token);
+
+        assertThat(firstPack.body()).contains("\"sort_order\":1");
+        assertThat(secondPack.body()).contains("\"sort_order\":1");
+        assertThat(firstTask.body()).contains("\"sort_order\":1");
+        assertThat(secondTask.body()).contains("\"sort_order\":2");
+
+        // the second work package of the FIRST project continues at 2
+        assertThat(post("/api/projects/ORD/work-packages", """
+                {"title":"Paket drei"}""", token).body()).contains("\"sort_order\":2");
+
+        // the lean summaries carry the field too
+        assertThat(get("/api/tasks?project=ORD", token).body())
+                .contains("\"sort_order\":1")
+                .contains("\"sort_order\":2");
+        assertThat(get("/api/work-packages?project=ORD", token).body()).contains("\"sort_order\":2");
+    }
+
+    /**
+     * An explicit {@code sort_order} wins over creation order in every list — for tasks
+     * and work packages alike. The tiebreak (created_at, then id) is only the fallback.
+     */
+    @Test
+    void explicitSortOrderWinsOverCreationOrderInLists() throws Exception {
+        String token = bearerToken("it-sort-order-sub");
+        post("/api/projects", """
+                {"name":"Sortierte Listen","short_code":"SORT"}""", token);
+        post("/api/projects/SORT/work-packages", """
+                {"title":"Paket A"}""", token);
+        post("/api/projects/SORT/work-packages", """
+                {"title":"Paket B"}""", token);
+        post("/api/projects/SORT/work-packages", """
+                {"title":"Paket C"}""", token);
+        post("/api/tasks", """
+                {"project":"SORT","title":"Aufgabe A"}""", token);
+        post("/api/tasks", """
+                {"project":"SORT","title":"Aufgabe B"}""", token);
+        post("/api/tasks", """
+                {"project":"SORT","title":"Aufgabe C"}""", token);
+
+        // SORT-1..3 are the work packages, SORT-4..6 the tasks (one shared counter).
+        // The resulting order is B, C, A — deliberately neither the creation order
+        // (A, B, C) nor its reverse, so only sort_order can produce it.
+        assertThat(patch("/api/work-packages/SORT-2", """
+                {"sort_order":1}""", token).status()).isEqualTo(200);
+        assertThat(patch("/api/work-packages/SORT-3", """
+                {"sort_order":2}""", token).status()).isEqualTo(200);
+        assertThat(patch("/api/work-packages/SORT-1", """
+                {"sort_order":3}""", token).status()).isEqualTo(200);
+        assertThat(patch("/api/tasks/SORT-5", """
+                {"sort_order":1}""", token).status()).isEqualTo(200);
+        assertThat(patch("/api/tasks/SORT-6", """
+                {"sort_order":2}""", token).status()).isEqualTo(200);
+        assertThat(patch("/api/tasks/SORT-4", """
+                {"sort_order":3}""", token).status()).isEqualTo(200);
+
+        // the lists read the explicit positions, not the creation order
+        String packs = get("/api/work-packages?project=SORT", token).body();
+        assertThat(indexOf(packs, "SORT-2")).isLessThan(indexOf(packs, "SORT-3"));
+        assertThat(indexOf(packs, "SORT-3")).isLessThan(indexOf(packs, "SORT-1"));
+
+        String tasks = get("/api/tasks?project=SORT", token).body();
+        assertThat(indexOf(tasks, "SORT-5")).isLessThan(indexOf(tasks, "SORT-6"));
+        assertThat(indexOf(tasks, "SORT-6")).isLessThan(indexOf(tasks, "SORT-4"));
+    }
+
+    /** The tri-state of {@code sort_order}: a value sets it, null leaves it alone, below 1 is rejected. */
+    @Test
+    void patchSortOrderSetsRejectsBelowOneAndKeepsItOnNull() throws Exception {
+        String token = bearerToken("it-sort-patch-sub");
+        post("/api/projects", """
+                {"name":"Reihenfolge patchen","short_code":"PATCH"}""", token);
+        post("/api/projects/PATCH/work-packages", """
+                {"title":"Bewegliches Paket"}""", token);
+        post("/api/tasks", """
+                {"project":"PATCH","title":"Bewegliche Aufgabe"}""", token);
+
+        Response moved = patch("/api/tasks/PATCH-2", """
+                {"sort_order":7}""", token);
+        assertThat(moved.status()).isEqualTo(200);
+        assertThat(moved.body()).contains("\"sort_order\":7");
+
+        // null means unchanged: another field moves, the position stays
+        Response retitled = patch("/api/tasks/PATCH-2", """
+                {"title":"Bewegliche Aufgabe (neu)"}""", token);
+        assertThat(retitled.body()).contains("\"sort_order\":7");
+        assertThat(get("/api/tasks/PATCH-2", token).body()).contains("\"sort_order\":7");
+
+        Response movedPack = patch("/api/work-packages/PATCH-1", """
+                {"sort_order":3}""", token);
+        assertThat(movedPack.status()).isEqualTo(200);
+        assertThat(movedPack.body()).contains("\"sort_order\":3");
+
+        Response zero = patch("/api/tasks/PATCH-2", """
+                {"sort_order":0}""", token);
+        assertThat(zero.status()).isEqualTo(400);
+        assertThat(zero.body()).contains("sort_order");
+
+        Response negative = patch("/api/work-packages/PATCH-1", """
+                {"sort_order":-2}""", token);
+        assertThat(negative.status()).isEqualTo(400);
+        assertThat(negative.body()).contains("sort_order");
+
+        // a repeated value is no change at all
+        Response same = patch("/api/tasks/PATCH-2", """
+                {"sort_order":7}""", token);
+        assertThat(same.status()).isEqualTo(400);
+        assertThat(same.body()).contains("nothing to change");
+
+        // the position is first-class: it shows up in the activity log
+        assertThat(get("/api/activities?parent=task:PATCH-2", token).body()).contains("sort_order='7'");
+    }
+
     @Test
     void rejectsEmptyPatchesAndInvalidDates() throws Exception {
         String token = bearerToken("it-err-sub");
@@ -222,5 +355,12 @@ class WorkItemsApiIT extends ApiTestSupport {
         Response unknownProject = post("/api/projects/ZZZZ/work-packages", """
                 {"title":"Nirgendwo"}""", token);
         assertThat(unknownProject.status()).isEqualTo(404);
+    }
+
+    /** The offset of a reference inside a JSON array body, for order assertions. */
+    private static int indexOf(String body, String reference) {
+        int index = body.indexOf("\"reference\":\"" + reference + "\"");
+        assertThat(index).as("reference %s in %s", reference, body).isNotNegative();
+        return index;
     }
 }

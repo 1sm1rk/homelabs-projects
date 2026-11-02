@@ -24,13 +24,17 @@ import de.homelabs.projects.domain.Task;
  *
  * <p>The work-package link is optional and regroupable; the composite foreign key
  * {@code (work_package_id, project_id)} keeps a task inside its own project.
+ *
+ * <p>{@code sort_order} is the mutable position inside the project, a sequence of its
+ * own: {@link #nextSortOrder} counts tasks only, never work packages, so both tables
+ * number 1..n independently. Lists read in that order.
  */
 @Repository
 public class TaskRepository {
 
     private static final String COLUMNS = "t.id, t.project_id, p.short_code AS project_code, t.work_package_id, "
             + "wp.seq AS work_package_seq, t.title, t.description_html, t.description_text, t.status, "
-            + "t.assignee_sub, t.due_date, t.seq, t.created_at, t.updated_at";
+            + "t.assignee_sub, t.due_date, t.seq, t.sort_order, t.created_at, t.updated_at";
 
     private static final String FROM = " FROM task t JOIN project p ON p.id = t.project_id "
             + "LEFT JOIN work_package wp ON wp.id = t.work_package_id ";
@@ -41,14 +45,28 @@ public class TaskRepository {
         this.jdbc = jdbc;
     }
 
-    public void insert(UUID id, UUID projectId, UUID workPackageId, int seq, String title, String descriptionHtml,
-            String descriptionText, ItemStatus status, String assigneeSub, LocalDate dueDate) {
-        jdbc.sql("INSERT INTO task (id, project_id, work_package_id, seq, title, description_html, description_text, "
-                        + "status, assignee_sub, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    /**
+     * The next ordering value inside the project: current max + 1, starting at 1. Callers
+     * run inside the create transaction and after the project's counter has locked the
+     * project row, so two creates of the same project cannot read the same maximum.
+     */
+    public int nextSortOrder(UUID projectId) {
+        return jdbc.sql("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM task WHERE project_id = ?")
+                .param(projectId)
+                .query(Integer.class)
+                .single();
+    }
+
+    public void insert(UUID id, UUID projectId, UUID workPackageId, int seq, int sortOrder, String title,
+            String descriptionHtml, String descriptionText, ItemStatus status, String assigneeSub, LocalDate dueDate) {
+        jdbc.sql("INSERT INTO task (id, project_id, work_package_id, seq, sort_order, title, description_html, "
+                        + "description_text, status, assignee_sub, due_date) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 .param(id)
                 .param(projectId)
                 .param(workPackageId)
                 .param(seq)
+                .param(sortOrder)
                 .param(title)
                 .param(descriptionHtml)
                 .param(descriptionText)
@@ -74,11 +92,13 @@ public class TaskRepository {
                 .optional();
     }
 
-    public void update(UUID id, UUID workPackageId, String title, String descriptionHtml, String descriptionText,
-            ItemStatus status, String assigneeSub, LocalDate dueDate) {
-        jdbc.sql("UPDATE task SET work_package_id = ?, title = ?, description_html = ?, description_text = ?, "
-                        + "status = ?, assignee_sub = ?, due_date = ?, updated_at = now() WHERE id = ?")
+    public void update(UUID id, UUID workPackageId, int sortOrder, String title, String descriptionHtml,
+            String descriptionText, ItemStatus status, String assigneeSub, LocalDate dueDate) {
+        jdbc.sql("UPDATE task SET work_package_id = ?, sort_order = ?, title = ?, description_html = ?, "
+                        + "description_text = ?, status = ?, assignee_sub = ?, due_date = ?, updated_at = now() "
+                        + "WHERE id = ?")
                 .param(workPackageId)
+                .param(sortOrder)
                 .param(title)
                 .param(descriptionHtml)
                 .param(descriptionText)
@@ -90,14 +110,17 @@ public class TaskRepository {
     }
 
     /**
-     * Lean task list. {@code includeInactiveProjects} is the explicit escape hatch:
-     * without it, tasks of deactivated or archived projects stay out of the list.
+     * Lean task list, ordered by the item's own position inside its project. The
+     * {@code created_at} and {@code id} tiebreaks keep the answer deterministic when
+     * positions collide (ties are allowed by design). {@code includeInactiveProjects} is
+     * the explicit escape hatch: without it, tasks of deactivated or archived projects
+     * stay out of the list.
      */
     public List<ItemSummary> find(String projectCode, UUID workPackageId, List<ItemStatus> statuses,
             String assigneeSub, LocalDate dueBefore, String query, boolean includeInactiveProjects, int limit) {
         StringBuilder sql = new StringBuilder(
-                "SELECT t.id, p.short_code || '-' || t.seq AS reference, t.title, t.status, t.assignee_sub, "
-                        + "t.due_date, t.description_text FROM task t "
+                "SELECT t.id, p.short_code || '-' || t.seq AS reference, t.title, t.status, t.sort_order, "
+                        + "t.assignee_sub, t.due_date, t.description_text FROM task t "
                         + "JOIN project p ON p.id = t.project_id WHERE TRUE");
         Map<String, Object> params = new LinkedHashMap<>();
         if (!includeInactiveProjects) {
@@ -129,7 +152,7 @@ public class TaskRepository {
             params.put("like", Search.like(query));
             params.put("query", query);
         }
-        sql.append(" ORDER BY t.created_at DESC, t.seq DESC LIMIT :limit");
+        sql.append(" ORDER BY t.sort_order ASC, t.created_at ASC, t.id ASC LIMIT :limit");
         params.put("limit", limit);
         return jdbc.sql(sql.toString())
                 .params(params)
@@ -138,6 +161,7 @@ public class TaskRepository {
                         rs.getString("reference"),
                         rs.getString("title"),
                         ItemStatus.parse(rs.getString("status")),
+                        rs.getInt("sort_order"),
                         rs.getString("assignee_sub"),
                         null,
                         rs.getObject("due_date", LocalDate.class),
@@ -165,6 +189,7 @@ public class TaskRepository {
                 null,
                 rs.getObject("due_date", LocalDate.class),
                 seq,
+                rs.getInt("sort_order"),
                 Rows.instant(rs, "created_at"),
                 Rows.instant(rs, "updated_at"),
                 List.of());

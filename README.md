@@ -65,10 +65,13 @@ interchangeably. Parents of comments, activity and attachments are written as
 `{entity_type}:{id-or-reference}` (`task:HP-12`); a bare `HP-12` resolves tasks first
 and then work packages.
 
-Lists return LEAN summaries — reference, title, status, assignee with display name,
-due date and ~200 characters of the derived text; full content comes from the single
-resource read. JSON field names are snake_case (`short_code`, `due_date`,
-`description_html`) on every layer.
+Lists return LEAN summaries — reference, title, status, `sort_order`, assignee with
+display name, due date and ~200 characters of the derived text; full content comes
+from the single resource read. Work packages and tasks are listed in plan order:
+`sort_order` first, then `created_at` — the position is a first-class, PATCH-mutable
+field that creates assign server-side (max + 1 per project, tasks and work packages
+counting their own sequences). JSON field names are snake_case (`short_code`,
+`due_date`, `description_html`) on every layer.
 
 Errors answer one shape, `{"error": "..."}`: 400 validation with the offending field,
 401 missing/invalid token, 404 unknown (a foreign identifier answers like an absent

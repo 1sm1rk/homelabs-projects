@@ -82,7 +82,8 @@ public class TaskController {
             @AuthenticationPrincipal Jwt jwt) {
         return tasks.update(ApiSupport.caller(jwt, source), idOrRef, new TaskService.Update(
                 request.title(), request.description(), request.descriptionHtml(), request.status(),
-                request.assigneeSub(), request.dueDate(), request.workPackageId(), request.labels()));
+                request.assigneeSub(), request.dueDate(), request.sortOrder(), request.workPackageId(),
+                request.labels()));
     }
 
     /** Body of {@code POST /api/tasks}. */
@@ -97,7 +98,11 @@ public class TaskController {
             List<String> labels) {
     }
 
-    /** Body of {@code PATCH /api/tasks/{idOrRef}}; absent fields stay unchanged. */
+    /**
+     * Body of {@code PATCH /api/tasks/{idOrRef}}; absent fields stay unchanged.
+     * {@code sortOrder} moves the task inside its project (1 = first); there is no
+     * "clear" — the column is NOT NULL, so null always means "unchanged".
+     */
     public record UpdateTaskRequest(
             @Size(max = 200) String title,
             String description,
@@ -105,6 +110,7 @@ public class TaskController {
             ItemStatus status,
             String assigneeSub,
             String dueDate,
+            Integer sortOrder,
             String workPackageId,
             List<String> labels) {
     }
