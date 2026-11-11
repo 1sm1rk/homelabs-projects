@@ -91,9 +91,17 @@
     <build>
         <plugins>
             <!-- Runnable service: repackage the jar (the packaged form is the deployment shape). -->
+            <!-- build-info: the micro frontend descriptor reports the service version. -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

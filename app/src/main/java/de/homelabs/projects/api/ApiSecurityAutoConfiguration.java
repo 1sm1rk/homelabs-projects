@@ -66,8 +66,10 @@ public class ApiSecurityAutoConfiguration {
 
     /**
      * Stateless JWT API: no session, no CSRF (no cookies). Everything under
-     * {@code /api/**} requires a valid token; only the liveness probe is open, so a
-     * container healthcheck needs no credentials.
+     * {@code /api/**} requires a valid token. Open are the liveness probe (a container
+     * healthcheck needs no credentials) and the micro frontend under {@code /mfe/**}
+     * — its descriptor and static modules carry no data; every call it makes goes
+     * through {@code /api/**} with the caller's token.
      */
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
@@ -77,6 +79,7 @@ public class ApiSecurityAutoConfiguration {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/mfe/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()));
         return http.build();
